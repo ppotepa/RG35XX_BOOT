@@ -53,31 +53,15 @@ install_script $SCRIPTS_DIR/bootmenulogo.sh /mnt/vendor/bin/bootmenulogo.sh
 install_script $SCRIPTS_DIR/mass_storage.sh /mnt/vendor/bin/mass_storage.sh
 install_script $SCRIPTS_DIR/usb_monitor.sh /mnt/vendor/bin/usb_monitor.sh
 install_script $SCRIPTS_DIR/dmenu_wrapper.sh /mnt/vendor/ctrl/dmenu_ln
-# === boot_custom.sh ===
-if [ -f $SCRIPTS_DIR/boot_custom.sh ]; then
-    install_script $SCRIPTS_DIR/boot_custom.sh /mnt/vendor/bin/boot_custom.sh
+
+# === fastreboot command ===
+if [ ! -f /usr/local/bin/fastreboot ]; then
+    install_script $SCRIPTS_DIR/fastreboot.sh /usr/local/bin/fastreboot
 else
-    echo "${YELLOW}[*] No boot_custom.sh provided in $SCRIPTS_DIR, creating default one${NC}"
-    cat > /mnt/vendor/bin/boot_custom.sh <<'EOF'
-#!/bin/sh
-# /mnt/vendor/bin/boot_custom.sh
-# Custom boot middleware for RG35XX
-
-echo "[boot_custom] Starting custom boot sequence..."
-
-# 1. Enable USB mass storage if available
-if [ -x /mnt/vendor/bin/mass_storage.sh ]; then
-    sh /mnt/vendor/bin/mass_storage.sh
+    echo "${YELLOW}[*] fastreboot command already exists, skipping${NC}"
 fi
-
-# 2. Continue with normal boot menu
-if [ -x /mnt/vendor/bin/bootmenu.sh ]; then
-    sh /mnt/vendor/bin/bootmenu.sh
-fi
-EOF
-    chmod +x /mnt/vendor/bin/boot_custom.sh
-    echo "${GREEN}[*] Created default boot_custom.sh${NC}"
-fi
+# === boot_custom.sh ===
+install_script $SCRIPTS_DIR/boot_custom.sh /mnt/vendor/bin/boot_custom.sh
 
 # === loadapp.sh handling ===
 LOADAPP=/mnt/vendor/bin/loadapp.sh
