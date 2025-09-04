@@ -1,100 +1,103 @@
 #!/bin/sh
-#
-# install.sh – safe one-shot installer for Anbernic custom boot mods
-#
 
-SCRIPT_DIR="$(dirname "$0")/scripts"
-BOOTMENU="/mnt/vendor/bin/bootmenu.sh"
-CUSTOMBOOT="/mnt/vendor/bin/boot_custom.sh"
-DMENU_WRAPPER="/mnt/vendor/ctrl/dmenu_ln"
-MSCRIPT="/mnt/vendor/bin/mass_storage.sh"
-LOGOSCRIPT="/mnt/vendor/bin/bootmenulogo.sh"
-SYSTEM_LOGO="/mnt/vendor/res1/boot/logo.png"
-CUSTOM_LOGO="$(dirname "$0")/logo.png"
-LOADAPP="/mnt/vendor/bin/loadapp.sh"
+# Color definitions
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
 
-timestamp=$(date +%Y%m%d%H%M%S)
+echo "${GREEN}[*] Starting custom boot installer...${NC}"
+
+SCRIPTS_DIR=./scripts
 
 backup_file() {
-    src="$1"
-    if [ -f "$src" ]; then
-        # Only back up once (never overwrite)
-        if ! ls "${src}".backup.* >/dev/null 2>&1; then
-            cp "$src" "$src.backup.$timestamp"
-            echo "[*] Backed up $src -> $src.backup.$timestamp"
+    if [ -f "$1" ]; then
+        if [ ! -f "$1.bak" ]; then
+            cp "$1" "$1.bak"
+            echo "${GREEN}[*] Backup created for $1${NC}"
         else
-            echo "[*] Backup for $src already exists, skipping."
+            echo "${YELLOW}[*] Backup for $1 already exists, skipping.${NC}"
         fi
     else
-        echo "[*] File $src does not exist, no backup needed."
+        echo "${YELLOW}[*] File $1 does not exist, no backup needed.${NC}"
     fi
 }
 
 install_script() {
     src="$1"
-    dest="$2"
-    name="$3"
-    
+    dst="$2"
     if [ -f "$src" ]; then
-        # Backup the destination file if it exists
-        backup_file "$dest"
-        
-        cp "$src" "$dest"
-        chmod +x "$dest"
-        echo "[*] Installed $name: $src -> $dest"
+        cp "$src" "$dst"
+        chmod +x "$dst"
+        echo "${GREEN}[*] Installed $src -> $dst${NC}"
     else
-        echo "[!] ERROR: $name script not found: $src"
-        exit 1
+        echo "${RED}[!] Source $src missing, skipping install for $dst${NC}"
     fi
 }
 
-echo "[*] Starting custom boot installer..."
+# === backups only for original system files ===
+echo "${YELLOW}[*] Creating backups of original system files...${NC}"
+backup_file /mnt/vendor/ctrl/dmenu_ln
+backup_file /mnt/vendor/res1/boot/logo.png
 
-# Check if required files exist
-if [ ! -d "$SCRIPT_DIR" ]; then
-    echo "[!] ERROR: Scripts directory not found: $SCRIPT_DIR"
-    echo "    Make sure the 'scripts' folder is in the same directory as install.sh"
-    exit 1
-fi
-
-if [ ! -f "boot_custom.sh" ]; then
-    echo "[!] ERROR: boot_custom.sh not found in the same directory as install.sh"
-    exit 1
-fi
-
-# --- Backup all files that will be modified ---
-echo "[*] Creating backups of existing files..."
-backup_file "$BOOTMENU"
-backup_file "$DMENU_WRAPPER"
-backup_file "$SYSTEM_LOGO"
-backup_file "$LOADAPP"
-backup_file "$CUSTOMBOOT"
-backup_file "$MSCRIPT"
-backup_file "$LOGOSCRIPT"
-
-# --- Replace system splash logo ---
-if [ -f "$CUSTOM_LOGO" ]; then
-    backup_file "$SYSTEM_LOGO"
-    cp "$CUSTOM_LOGO" "$SYSTEM_LOGO"
-    echo "[*] Installed custom splash logo: $CUSTOM_LOGO -> $SYSTEM_LOGO"
+# === logo ===
+if [ -f ./logo.png ]; then  
+    cp ./logo.png /mnt/vendor/res1/boot/logo.png
+    echo "${GREEN}[*] Installed custom splash logo${NC}"
 else
-    echo "[!] No custom logo.png found next to install.sh"
+    echo "${YELLOW}[!] logo.png not found, skipping logo install${NC}"
 fi
 
-# --- Install all scripts ---
-echo "[*] Installing scripts..."
-install_script "$SCRIPT_DIR/bootmenulogo.sh" "$LOGOSCRIPT" "boot menu logo script"
-install_script "$SCRIPT_DIR/mass_storage.sh" "$MSCRIPT" "mass storage script"
-install_script "boot_custom.sh" "$CUSTOMBOOT" "custom boot middleware"
-install_script "$SCRIPT_DIR/dmenu_wrapper.sh" "$DMENU_WRAPPER" "dmenu wrapper"
-
-# --- Patch loadapp.sh to use boot_custom.sh ---
-echo "[*] Patching loadapp.sh..."
-if grep -q "BOOTMENU=" "$LOADAPP"; then
-    sed -i 's|^BOOTMENU=.*|BOOTMENU="/mnt/vendor/bin/boot_custom.sh"|' "$LOADAPP"
-    echo "[*] Updated loadapp.sh to use boot_custom.sh"
+# === scripts we ship ===
+install_script $SCRIPTS_DIR/bootmenulogo.sh /mnt/vendor/bin/bootmenulogo.sh
+install_script $SCRIPTS_DIR/mass_storage.sh /mnt/vendor/bin/mass_storage.sh
+install_script $SCRIPTS_DIR/usb_monitor.sh /mnt/vendor/bin/usb_monitor.sh
+install_script $SCRIPTS_DIR/dmenu_wrapper.sh /mnt/vendor/ctrl/dmenu_ln
+# === boot_custom.sh ===
+if [ -f $SCRIPTS_DIR/boot_custom.sh ]; then
+    install_script $SCRIPTS_DIR/boot_custom.sh /mnt/vendor/bin/boot_custom.sh
 else
-    echo "[!] Could not find BOOTMENU= line in loadapp.sh, manual edit may be needed."
+    echo "${YELLOW}[*] No boot_custom.sh provided in $SCRIPTS_DIR, creating default one${NC}"
+    cat > /mnt/vendor/bin/boot_custom.sh <<'EOF'
+#!/bin/sh
+# /mnt/vendor/bin/boot_custom.sh
+# Custom boot middleware for RG35XX
+
+echo "[boot_custom] Starting custom boot sequence..."
+
+# 1. Enable USB mass storage if available
+if [ -x /mnt/vendor/bin/mass_storage.sh ]; then
+    sh /mnt/vendor/bin/mass_storage.sh
 fi
 
-echo "[*] Custom boot installation complete. Reboot to test."
+# 2. Continue with normal boot menu
+if [ -x /mnt/vendor/bin/bootmenu.sh ]; then
+    sh /mnt/vendor/bin/bootmenu.sh
+fi
+EOF
+    chmod +x /mnt/vendor/bin/boot_custom.sh
+    echo "${GREEN}[*] Created default boot_custom.sh${NC}"
+fi
+
+# === loadapp.sh handling ===
+LOADAPP=/mnt/vendor/bin/loadapp.sh
+
+if [ -f "$LOADAPP" ]; then
+    if grep -q "boot_custom.sh" "$LOADAPP"; then
+        echo "${YELLOW}[*] loadapp.sh already patched for custom boot${NC}"
+    else
+        echo "${GREEN}[*] Patching loadapp.sh to run boot_custom.sh${NC}"
+        sed -i '1i sh /mnt/vendor/bin/boot_custom.sh' "$LOADAPP"
+    fi
+else
+    echo "${YELLOW}[*] loadapp.sh not found, creating new one${NC}"
+    cat > "$LOADAPP" <<'EOF'
+#!/bin/sh
+# Auto-generated by custom boot installer
+sh /mnt/vendor/bin/boot_custom.sh
+EOF
+    chmod +x "$LOADAPP"
+    echo "${GREEN}[*] Created new loadapp.sh with boot_custom.sh hook${NC}"
+fi
+
+echo "${GREEN}[*] Custom boot installation complete. Reboot to test.${NC}"
