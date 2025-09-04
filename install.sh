@@ -84,4 +84,15 @@ EOF
     echo "${GREEN}[*] Created new loadapp.sh with boot_custom.sh hook${NC}"
 fi
 
+# === Run additional installers ===
+echo "${GREEN}[*] Running additional component installers...${NC}"
+
+# Git autofetch installer
+if [ -f "$SCRIPTS_DIR/git_autofetch_install.sh" ]; then
+    echo "${GREEN}[*] Running git_autofetch installer...${NC}"
+    sh "$SCRIPTS_DIR/git_autofetch_install.sh"
+else
+    echo "${YELLOW}[*] git_autofetch_install.sh not found, skipping${NC}"
+fi
+
 echo "${GREEN}[*] Custom boot installation complete. Reboot to test.${NC}"
