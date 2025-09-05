@@ -77,32 +77,7 @@ echo 250 > configs/c.1/MaxPower       # 500mA
 echo "[mass_storage] Created configuration" >> "$LOG"
 
 # List of partitions to export (all available partitions)
-PARTS=""
-
-# Get all available partitions on mmcblk0
-for part in /dev/mmcblk0p*; do
-    if [ -e "$part" ]; then
-        # Get filesystem type for logging
-        FSTYPE=$(blkid -o value -s TYPE "$part" 2>/dev/null)
-        LABEL=$(blkid -o value -s LABEL "$part" 2>/dev/null)
-        
-        if [ -n "$LABEL" ]; then
-            echo "[mass_storage] Found partition: $part ($FSTYPE) - Label: $LABEL" >> "$LOG"
-        else
-            echo "[mass_storage] Found partition: $part ($FSTYPE)" >> "$LOG"
-        fi
-        
-        PARTS="$PARTS $part"
-    fi
-done
-
-# Check if we found any partitions
-if [ -z "$PARTS" ]; then
-    echo "[mass_storage] No partitions found on mmcblk0" >> "$LOG"
-    exit 1
-fi
-
-echo "[mass_storage] Will expose partitions: $PARTS" >> "$LOG"
+PARTS="/dev/mmcblk0p1 /dev/mmcblk0p2 /dev/mmcblk0p3 /dev/mmcblk0p4 /dev/mmcblk0p5 /dev/mmcblk0p6 /dev/mmcblk0p7"
 
 echo "[mass_storage] Starting partition setup" >> "$LOG"
 
@@ -114,44 +89,21 @@ for part in $PARTS; do
         # Create function directory
         mkdir -p "functions/mass_storage.usb$i"
         
-        # Check if partition is currently mounted and handle accordingly
-        MOUNT_POINT=$(mount | grep "$part" | awk '{print $3}' | head -1)
-        if [ -n "$MOUNT_POINT" ]; then
-            echo "[mass_storage] WARNING: $part is mounted at $MOUNT_POINT" >> "$LOG"
-            
-            # Don't unmount critical system partitions
-            case "$MOUNT_POINT" in
-                "/"|"/mnt/vendor"|"/boot"|"/usr"|"/var"|"/etc")
-                    echo "[mass_storage] CRITICAL: Cannot unmount system partition $part ($MOUNT_POINT)" >> "$LOG"
-                    echo "[mass_storage] Exposing as read-only for safety" >> "$LOG"
-                    RO_MODE=1
-                    ;;
-                *)
-                    echo "[mass_storage] Unmounting $part from $MOUNT_POINT" >> "$LOG"
-                    umount "$part" 2>/dev/null || {
-                        echo "[mass_storage] Failed to unmount $part, exposing as read-only" >> "$LOG"
-                        RO_MODE=1
-                    }
-                    ;;
-            esac
-        else
-            RO_MODE=0  # Can be read-write if not mounted
+        # Check if partition is currently mounted and unmount if necessary
+        if mount | grep -q "$part"; then
+            echo "[mass_storage] WARNING: $part is mounted, unmounting..." >> "$LOG"
+            umount "$part" 2>/dev/null || true
         fi
         
         # Set the backing file
         echo "$part" > "functions/mass_storage.usb$i/lun.0/file"
-        echo $RO_MODE > "functions/mass_storage.usb$i/lun.0/ro"
+        echo 0 > "functions/mass_storage.usb$i/lun.0/ro"  # Read-write access
         echo 0 > "functions/mass_storage.usb$i/lun.0/removable"  # Non-removable
         
         # Link to configuration
         ln -s "functions/mass_storage.usb$i" "configs/c.1/"
         
-        ACCESS_MODE="read-write"
-        if [ $RO_MODE -eq 1 ]; then
-            ACCESS_MODE="read-only"
-        fi
-        
-        echo "[mass_storage] Added $part as LUN $i ($ACCESS_MODE)" >> "$LOG"
+        echo "[mass_storage] Added $part as LUN $i" >> "$LOG"
         i=$((i+1))
     else
         echo "[mass_storage] Partition $part not found, skipping" >> "$LOG"
