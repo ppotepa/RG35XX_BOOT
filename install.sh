@@ -23,13 +23,44 @@ backup_file() {
     fi
 }
 
+# Function to check if source file is newer than destination
+is_newer_content() {
+    src="$1"
+    dst="$2"
+    
+    # If destination doesn't exist, source is newer
+    if [ ! -f "$dst" ]; then
+        return 0
+    fi
+    
+    # Compare file contents
+    if cmp -s "$src" "$dst"; then
+        # Files are identical
+        return 1
+    else
+        # Files are different, source has newer content
+        return 0
+    fi
+}
+
 install_script() {
     src="$1"
     dst="$2"
     if [ -f "$src" ]; then
-        cp "$src" "$dst"
-        chmod +x "$dst"
-        echo "${GREEN}[*] Installed $src -> $dst${NC}"
+        # Check if it's a backup file
+        if echo "$dst" | grep -q "\.bak$"; then
+            echo "${YELLOW}[!] Will not install to backup file: $dst${NC}"
+            return
+        fi
+        
+        # Only install if content is different
+        if is_newer_content "$src" "$dst"; then
+            cp "$src" "$dst"
+            chmod +x "$dst"
+            echo "${GREEN}[*] Installed $src -> $dst (updated)${NC}"
+        else
+            echo "${YELLOW}[*] Skipping $dst - already up to date${NC}"
+        fi
     else
         echo "${RED}[!] Source $src missing, skipping install for $dst${NC}"
     fi
@@ -41,9 +72,13 @@ backup_file /mnt/vendor/ctrl/dmenu_ln
 backup_file /mnt/vendor/res1/boot/logo.png
 
 # === logo ===
-if [ -f ./logo.png ]; then  
-    cp ./logo.png /mnt/vendor/res1/boot/logo.png
-    echo "${GREEN}[*] Installed custom splash logo${NC}"
+if [ -f ./logo.png ]; then
+    if is_newer_content "./logo.png" "/mnt/vendor/res1/boot/logo.png"; then
+        cp ./logo.png /mnt/vendor/res1/boot/logo.png
+        echo "${GREEN}[*] Installed custom splash logo (updated)${NC}"
+    else
+        echo "${YELLOW}[*] Skipping logo install - already up to date${NC}"
+    fi
 else
     echo "${YELLOW}[!] logo.png not found, skipping logo install${NC}"
 fi
@@ -58,7 +93,12 @@ install_script $SCRIPTS_DIR/dmenu_wrapper.sh /mnt/vendor/ctrl/dmenu_ln
 if [ ! -f /usr/local/bin/fastreboot ]; then
     install_script $SCRIPTS_DIR/fastreboot.sh /usr/local/bin/fastreboot
 else
-    echo "${YELLOW}[*] fastreboot command already exists, skipping${NC}"
+    # Only update if content is different
+    if is_newer_content "$SCRIPTS_DIR/fastreboot.sh" "/usr/local/bin/fastreboot"; then
+        install_script $SCRIPTS_DIR/fastreboot.sh /usr/local/bin/fastreboot
+    else
+        echo "${YELLOW}[*] fastreboot command already exists and is up to date${NC}"
+    fi
 fi
 # === boot_custom.sh ===
 install_script $SCRIPTS_DIR/boot_custom.sh /mnt/vendor/bin/boot_custom.sh
