@@ -76,8 +76,41 @@ echo 250 > configs/c.1/MaxPower       # 500mA
 
 echo "[mass_storage] Created configuration" >> "$LOG"
 
-# List of partitions to export (start with safer partitions)
-PARTS="/dev/mmcblk0p1 /dev/mmcblk0p2"
+# List of partitions to export (safer partitions for Windows compatibility)
+# Check for ROM partition (usually FAT32) or user data partition
+PARTS=""
+
+# Look for FAT32 partitions first (Windows compatible)
+for part in /dev/mmcblk0p*; do
+    if [ -e "$part" ]; then
+        # Check if it's a FAT partition by trying to mount it
+        FSTYPE=$(blkid -o value -s TYPE "$part" 2>/dev/null)
+        case "$FSTYPE" in
+            "vfat"|"fat32"|"fat16")
+                echo "[mass_storage] Found FAT partition: $part ($FSTYPE)" >> "$LOG"
+                PARTS="$PARTS $part"
+                ;;
+            "ext4"|"ext3"|"ext2")
+                echo "[mass_storage] Skipping Linux partition: $part ($FSTYPE)" >> "$LOG"
+                ;;
+            *)
+                # Unknown filesystem, check if it's safe to expose
+                if echo "$part" | grep -E "(mmcblk0p[4-9]|mmcblk0p1[0-9])" > /dev/null; then
+                    echo "[mass_storage] Found user partition: $part (unknown fs: $FSTYPE)" >> "$LOG"
+                    PARTS="$PARTS $part"
+                else
+                    echo "[mass_storage] Skipping system partition: $part ($FSTYPE)" >> "$LOG"
+                fi
+                ;;
+        esac
+    fi
+done
+
+# If no FAT partitions found, don't expose anything to avoid data corruption
+if [ -z "$PARTS" ]; then
+    echo "[mass_storage] No safe partitions found for Windows exposure" >> "$LOG"
+    exit 1
+fi
 
 echo "[mass_storage] Starting partition setup" >> "$LOG"
 
@@ -97,7 +130,7 @@ for part in $PARTS; do
         
         # Set the backing file
         echo "$part" > "functions/mass_storage.usb$i/lun.0/file"
-        echo 0 > "functions/mass_storage.usb$i/lun.0/ro"  # Read-write access
+        echo 1 > "functions/mass_storage.usb$i/lun.0/ro"  # Read-only for safety
         echo 0 > "functions/mass_storage.usb$i/lun.0/removable"  # Non-removable
         
         # Link to configuration
