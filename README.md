@@ -1,4 +1,3 @@
-n
 # Anbernic RG35XX Custom Boot & Kernel Mods
 
 > ⚠️ **Work in Progress**  
