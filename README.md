@@ -11,10 +11,11 @@ The goal is to make the RG35XX more **DIY-friendly**, enabling developers to rep
 
 ## 🔎 Project Status & Reality Check (2025-09-08)
 
-**TL;DR:** Using this project will get you as far as **successfully changing the kernel**. After that, a stock userspace component **takes over the primary framebuffer** and **redirects the visible console to a different TTY**. You can still scrape logs and debug, but **it’s tedious compared to flashing a fresh, clean build**.
+**TL;DR:** Using this project will get you as far as **successfully changing the kernel**. After that, a stock userspace component **takes over the primary framebuffer** and **redirects the visible console to a different TTY**. 
+You can still scrape logs and debug, but **it’s tedious compared to flashing a fresh, clean build**.
 
 ### What this means in practice
-- After kernel → userspace handoff, the on-device screen often **stops showing the expected VT/console**. The launcher/boot wrapper writes straight to `/dev/fb0`, while the real console lives on another TTY (e.g., `tty2`/`tty7`) and may not be visible.
+- After kernel → userspace handoff, the on-device screen often **stops showing the expected VT/console**. The launcher/boot wrapper writes straight to `/dev/fb0`, while the real console lives on another TTY (according to boot cfg its tty=S0) and may not be visible.
 - Debugging still works via **serial console**, **initramfs shell**, or by forcing **`console=tty0`** (or baking it into the kernel with `CONFIG_CMDLINE`). On stock rootfs, though, you’ll play whack-a-mole.
 - If you want fast iteration, **installing/flashing a freshly created build** (predictable services, getty/VT, logging) is usually **faster and cleaner** than fighting the stock image.
 
